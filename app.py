@@ -45,9 +45,10 @@ def build_system_prompt() -> str:
 
 SYSTEM_PROMPT = build_system_prompt()
 
-ICON_POSITIVE = icon_svg("circle-check", fill="#198754")
-ICON_ALERT = icon_svg("triangle-exclamation", fill="#dc3545")
-ICON_INFO = icon_svg("circle-info", fill="#0d6efd")
+# Value box icons with high contrast colors for visibility
+ICON_POSITIVE = icon_svg("circle-check", fill="white")
+ICON_ALERT = icon_svg("triangle-exclamation", fill="white")
+ICON_INFO = icon_svg("circle-info", fill="white")
 
 
 @dataclass
