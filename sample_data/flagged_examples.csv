@@ -1,0 +1,7 @@
+claim_id,policy_id,claim_date,claim_amount,claim_type,description
+F-2001,PF-900,2025-03-01,18000,property,Initial roof leak claim.
+F-2002,PF-900,2025-03-10,19500,property,Follow-up claim filed 9 days later for same roof damage; exaggerated repairs requested.
+F-2003,PF-901,2025-03-05,52000,auto,Major collision payout request; staged accident suspected per witness.
+F-2004,PF-902,2025-03-12,4800,health,First outpatient surgery reimbursement submission.
+F-2005,PF-902,2025-03-12,4800,health,Duplicate submission for identical procedure on same day.
+F-2006,PF-903,2025-03-18,29000,travel,Repeat claim stating police report pending for missing jewelry.

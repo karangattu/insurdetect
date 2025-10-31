@@ -1,0 +1,9 @@
+claim_id,policy_id,claim_date,claim_amount,claim_type,description
+C-1001,P-001,2025-01-02,4800,auto,Rear-end collision; police report filed.
+C-1002,P-001,2025-01-10,5200,auto,Follow-up medical expenses from prior accident.
+C-1003,P-002,2025-01-05,12000,property,Basement flooding after pipe burst.
+C-1004,P-003,2025-01-08,42000,health,Surgery reimbursement; receipts provided.
+C-1005,P-004,2025-01-12,6000,property,Repeat claim: staged damage to roof.
+C-1006,P-004,2025-01-12,6100,property,Duplicate submission same day; photos attached.
+C-1007,P-005,2025-01-20,7000,travel,Flight cancellation due to weather.
+C-1008,P-002,2025-01-28,31000,property,Additional structural repair costs; exaggerated report.

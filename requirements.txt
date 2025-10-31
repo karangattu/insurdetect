@@ -1,0 +1,4 @@
+shiny>=0.9.0
+pandas>=2.2.0
+faicons>=0.2.2
+chatlas[bedrock-anthropic]>=0.3.0

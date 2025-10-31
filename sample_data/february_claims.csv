@@ -1,0 +1,9 @@
+claim_id,policy_id,claim_date,claim_amount,claim_type,description
+C-1101,P-010,2025-02-03,3500,auto,Minor bumper repair; police report pending.
+C-1102,P-011,2025-02-07,9000,health,Approved physical therapy invoices.
+C-1103,P-012,2025-02-11,15000,property,Windstorm damage to siding.
+C-1104,P-010,2025-02-14,3600,auto,Rental vehicle coverage extension.
+C-1105,P-013,2025-02-18,28000,property,Large appliance replacement after power surge.
+C-1106,P-014,2025-02-20,5500,travel,Lost luggage reimbursement.
+C-1107,P-014,2025-02-22,5600,travel,Repeat claim for same luggage; repeat incident.
+C-1108,P-012,2025-02-27,17000,property,Additional siding repairs after contractor assessment.
