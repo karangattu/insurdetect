@@ -629,7 +629,19 @@ app_ui = ui.page_fluid(
             ui.card_header(
                 ui.row(
                     ui.column(8, ui.tags.strong("Upload Claims Data")),
-                    ui.column(4, ICON_INFO),
+                    ui.column(
+                        4,
+                        ui.tooltip(
+                            ICON_INFO,
+                            (
+                                "Upload CSV with: claim_id, policy_id, "
+                                "claim_date, claim_amount, description. "
+                                "AI analyzes each claim for fraud using "
+                                "guardrails and policy statistics."
+                            ),
+                            placement="left",
+                        ),
+                    ),
                 )
             ),
             ui.input_file(
