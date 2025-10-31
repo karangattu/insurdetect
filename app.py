@@ -1,5 +1,3 @@
-"""Shiny for Python app that triages insurance claims for potential fraud."""
-
 from __future__ import annotations
 
 import json
@@ -246,8 +244,7 @@ def clean_columns(df: pd.DataFrame) -> pd.DataFrame:
 def merge_llm_flags(df: pd.DataFrame, llm_result: LLMResult) -> pd.DataFrame:
     merged = df.copy()
     lookup = {
-        int(item.get("row_index", -1)): item
-        for item in llm_result.flagged_claims
+        int(item.get("row_index", -1)): item for item in llm_result.flagged_claims
     }
     merged["llm_flagged"] = merged.index.map(lambda idx: idx in lookup)
     merged["llm_reasons"] = merged.index.map(
@@ -360,18 +357,14 @@ def server(input: Inputs, output: Outputs, session: Session) -> None:
 
         detail: List[ui.Tag] = []
         if flagged_total:
-            severity_counts = (
-                df[df["llm_flagged"]]["severity"].value_counts().to_dict()
-            )
+            severity_counts = df[df["llm_flagged"]]["severity"].value_counts().to_dict()
             severity_text = ", ".join(
                 f"{level.title()}: {count}"
                 for level, count in severity_counts.items()
                 if level
             )
             if severity_text:
-                detail.append(
-                    ui.p(ui.strong("Flag severities:"), " ", severity_text)
-                )
+                detail.append(ui.p(ui.strong("Flag severities:"), " ", severity_text))
         if llm.summary:
             detail.append(ui.p(ui.strong("LLM summary:"), " ", llm.summary))
         if llm.error:

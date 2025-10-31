@@ -7,9 +7,9 @@ them to AWS Bedrock (Anthropic Claude) for fraud risk scoring.
 
 - Upload monthly claim batches as CSV files.
 - Raw rows are forwarded to Anthropic Claude via `chatlas.ChatBedrockAnthropic`; the
-   LLM performs all fraud heuristics.
+  LLM performs all fraud heuristics.
 - Shiny UI surfaces the LLM verdicts, severity, and rationale with Font Awesome
-   icons from [`faicons`](https://pypi.org/project/faicons/).
+  icons from [`faicons`](https://pypi.org/project/faicons/).
 
 ## Setup
 
@@ -21,9 +21,7 @@ them to AWS Bedrock (Anthropic Claude) for fraud risk scoring.
    pip install -r requirements.txt
    ```
 
-
 2. Optionally override the default model and endpoint:
-
    - `BEDROCK_MODEL_ID` (defaults to `us.anthropic.claude-haiku-4-5-20251001-v1:0`).
 
 ## Running the app
