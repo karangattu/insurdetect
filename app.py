@@ -118,30 +118,105 @@ def parse_llm_output(payload: str) -> LLMResult:
     """Extract structured content from the language model response."""
 
     cleaned = payload.strip()
+
+    if "```json" in cleaned:
+        start = cleaned.find("```json") + 7
+        end = cleaned.find("```", start)
+        if end != -1:
+            cleaned = cleaned[start:end].strip()
+
     json_start = cleaned.find("{")
     json_end = cleaned.rfind("}")
     if json_start == -1 or json_end == -1:
         return LLMResult(
             flagged_claims=[],
             summary="",
-            raw_text=payload,
+            raw_text=payload[:500],  # Truncate for display
             error="No JSON object found",
         )
 
-    json_blob = cleaned[json_start:json_end + 1]
+    json_blob = cleaned[json_start : json_end + 1]
+
+    # Try standard parse first
     try:
         parsed = json.loads(json_blob)
     except json.JSONDecodeError as exc:
+        # Try to salvage partial JSON by finding valid flagged_claims array
+        try:
+            flagged_start = json_blob.find('"flagged_claims"')
+            if flagged_start != -1:
+                array_start = json_blob.find("[", flagged_start)
+                if array_start != -1:
+                    # Find matching closing bracket
+                    bracket_count = 0
+                    array_end = -1
+                    for i in range(array_start, len(json_blob)):
+                        if json_blob[i] == "[":
+                            bracket_count += 1
+                        elif json_blob[i] == "]":
+                            bracket_count -= 1
+                            if bracket_count == 0:
+                                array_end = i + 1
+                                break
+
+                    if array_end != -1:
+                        flagged_array = json.loads(json_blob[array_start:array_end])
+                        return LLMResult(
+                            flagged_claims=flagged_array,
+                            summary="Partial response recovered",
+                            raw_text=payload[:500],
+                            error=f"Original parse failed, recovered {len(flagged_array)} flags",
+                        )
+        except Exception:
+            pass
+
         return LLMResult(
             flagged_claims=[],
             summary="",
-            raw_text=payload,
+            raw_text=payload[:500],
             error=f"Failed to decode JSON: {exc}",
         )
 
     flagged = parsed.get("flagged_claims", [])
     summary = parsed.get("summary", "")
-    return LLMResult(flagged_claims=flagged, summary=summary, raw_text=payload)
+    return LLMResult(flagged_claims=flagged, summary=summary, raw_text=payload[:500])
+
+
+def get_policy_statistics(
+    policy_id: str, claims_data: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Calculate statistics for a given policy from the claims dataset.
+
+    Parameters
+    ----------
+    policy_id : The policy identifier to analyze.
+    claims_data : The full list of claim records.
+
+    Returns
+    -------
+    A dict with 'policy_id', 'claim_count', 'avg_amount', 'max_amount'.
+    """
+    policy_claims = [
+        c
+        for c in claims_data
+        if str(c.get("policy_id", "")).strip() == str(policy_id).strip()
+    ]
+    if not policy_claims:
+        return {
+            "policy_id": policy_id,
+            "claim_count": 0,
+            "avg_amount": 0.0,
+            "max_amount": 0.0,
+        }
+
+    amounts = [float(c.get("claim_amount", 0)) for c in policy_claims]
+    return {
+        "policy_id": policy_id,
+        "claim_count": len(amounts),
+        "avg_amount": sum(amounts) / len(amounts) if amounts else 0.0,
+        "max_amount": max(amounts) if amounts else 0.0,
+    }
 
 
 def review_claims_with_chatlas(
@@ -180,47 +255,82 @@ def review_claims_with_chatlas(
             raw_text="",
         )
 
-    prompt_payload = {
-        "request_id": request_id or str(uuid.uuid4()),
-        "instructions": (
-            "Review the provided insurance claims and decide which rows are "
-            "potential fraud. Return JSON with 'flagged_claims' (list) and "
-            "'summary' (string)."
-        ),
-        "columns": columns,
-        "claims": records,
-        "response_schema": {
-            "flagged_claims": [
-                {
-                    "row_index": "int",
-                    "claim_id": "string",
-                    "severity": "one of ['low','medium','high']",
-                    "reasons": "list of brief explanations",
-                }
-            ],
-            "summary": "string",
-        },
-    }
-
-    user_prompt = (
-        "Use only the supplied data. Row indices are zero-based. "
-        "Return JSON that matches the schema exactly.\n"
-        f"{json.dumps(prompt_payload, indent=2)}"
-    )
+    # Process in batches to avoid overwhelming the LLM with large payloads
+    BATCH_SIZE = 100
+    all_flagged = []
+    all_summaries = []
 
     chat_client = client or make_chat_client(system_prompt=system_prompt)
 
-    try:
-        response = chat_client.chat(user_prompt)
-        text = extract_text(response)
-        return parse_llm_output(text)
-    except Exception as exc:  # noqa: BLE001
-        return LLMResult(
-            flagged_claims=[],
-            summary="",
-            raw_text="",
-            error=f"Bedrock request failed: {exc}",
+    # Register the tool so the LLM can request policy statistics
+    def tool_get_policy_stats(policy_id: str) -> Dict[str, Any]:
+        """
+        Get claim statistics for a specific policy.
+
+        Parameters
+        ----------
+        policy_id : The policy identifier to analyze.
+        """
+        return get_policy_statistics(policy_id, records)
+
+    chat_client.register_tool(tool_get_policy_stats)
+
+    for batch_start in range(0, len(records), BATCH_SIZE):
+        batch_end = min(batch_start + BATCH_SIZE, len(records))
+        batch_records = records[batch_start:batch_end]
+
+        prompt_payload = {
+            "request_id": request_id or str(uuid.uuid4()),
+            "batch_info": f"Processing rows {batch_start} to {batch_end - 1} of {len(records)} total",
+            "instructions": (
+                "Review the provided insurance claims and decide which rows are "
+                "potential fraud. Return JSON with 'flagged_claims' (list) and "
+                "'summary' (string). Use row indices relative to the full dataset."
+            ),
+            "columns": columns,
+            "claims": batch_records,
+            "offset": batch_start,  # Tell LLM the starting row index
+            "response_schema": {
+                "flagged_claims": [
+                    {
+                        "row_index": "int (use offset + local index)",
+                        "claim_id": "string",
+                        "severity": "one of ['low','medium','high']",
+                        "reasons": "list of brief explanations",
+                    }
+                ],
+                "summary": "string",
+            },
+        }
+
+        user_prompt = (
+            "Use only the supplied data. Row indices should be offset + local position. "
+            "Return JSON that matches the schema exactly.\n"
+            f"{json.dumps(prompt_payload, indent=2)}"
         )
+
+        try:
+            response = chat_client.chat(user_prompt)
+            text = extract_text(response)
+            batch_result = parse_llm_output(text)
+
+            if batch_result.flagged_claims:
+                all_flagged.extend(batch_result.flagged_claims)
+            if batch_result.summary:
+                all_summaries.append(batch_result.summary)
+
+        except Exception as exc:  # noqa: BLE001
+            all_summaries.append(f"Batch {batch_start}-{batch_end - 1} failed: {exc}")
+
+    combined_summary = (
+        "\n".join(all_summaries) if all_summaries else "No issues detected"
+    )
+
+    return LLMResult(
+        flagged_claims=all_flagged,
+        summary=combined_summary,
+        raw_text=f"Processed {len(records)} claims in {(len(records) + BATCH_SIZE - 1) // BATCH_SIZE} batches",
+    )
 
 
 def call_bedrock(df: pd.DataFrame) -> LLMResult:
@@ -314,113 +424,239 @@ def server(input: Inputs, output: Outputs, session: Session) -> None:
 
     @output
     @render.ui
-    def guidance() -> ui.Tag:
-        return ui.div(
-            {"class": "help-panel"},
-            ui.HTML(
-                f"{ICON_INFO} Upload a CSV file of claims. "
-                "Fraud screening is handled entirely by the Bedrock LLM."
+    def value_boxes() -> ui.TagList:
+        uploads = input.claims_file()
+        if not uploads:
+            return ui.TagList()
+
+        df = consolidated()
+        total = len(df)
+        flagged_total = int(df["llm_flagged"].sum())
+        cleared_total = total - flagged_total
+        flagged_pct = (flagged_total / total * 100) if total > 0 else 0
+
+        return ui.TagList(
+            ui.value_box(
+                title="Total Claims",
+                value=str(total),
+                showcase=ICON_INFO,
+                theme="primary",
+            ),
+            ui.value_box(
+                "Flagged for Review",
+                str(flagged_total),
+                ui.p(f"{flagged_pct:.1f}% of total claims"),
+                showcase=ICON_ALERT,
+                theme="danger" if flagged_total > 0 else "secondary",
+            ),
+            ui.value_box(
+                title="Cleared",
+                value=str(cleared_total),
+                showcase=ICON_POSITIVE,
+                theme="success",
             ),
         )
 
     @output
     @render.ui
-    def summary_cards() -> ui.Tag:
+    def summary_card() -> ui.Tag:
         uploads = input.claims_file()
         if not uploads:
             return ui.div()
 
         df = consolidated()
         llm = llm_result()
-        total = len(df)
         flagged_total = int(df["llm_flagged"].sum())
-        cleared_total = total - flagged_total
 
-        cards = ui.div(
-            {"class": "metrics"},
-            ui.div(
-                {"class": "metric"},
-                ui.HTML(f"{ICON_INFO} Total claims"),
-                ui.h2(str(total)),
-            ),
-            ui.div(
-                {"class": "metric"},
-                ui.HTML(f"{ICON_ALERT} Flagged by LLM"),
-                ui.h2(str(flagged_total)),
-            ),
-            ui.div(
-                {"class": "metric"},
-                ui.HTML(f"{ICON_POSITIVE} Cleared"),
-                ui.h2(str(cleared_total)),
-            ),
-        )
+        content: List[ui.Tag] = []
 
-        detail: List[ui.Tag] = []
         if flagged_total:
-            severity_counts = df[df["llm_flagged"]]["severity"].value_counts().to_dict()
-            severity_text = ", ".join(
-                f"{level.title()}: {count}"
-                for level, count in severity_counts.items()
-                if level
-            )
-            if severity_text:
-                detail.append(ui.p(ui.strong("Flag severities:"), " ", severity_text))
-        if llm.summary:
-            detail.append(ui.p(ui.strong("LLM summary:"), " ", llm.summary))
-        if llm.error:
-            detail.append(ui.p(ui.strong("LLM status:"), " ", llm.error))
+            # Show flagged claim IDs first
+            flagged_df = df[df["llm_flagged"]]
+            if "claim_id" in flagged_df.columns:
+                content.append(ui.h5("Flagged Claims"))
+                claim_ids = flagged_df["claim_id"].tolist()
 
-        return ui.div(cards, *detail)
+                # Group by severity if available
+                if "severity" in flagged_df.columns:
+                    severity_groups = {}
+                    for _, row in flagged_df.iterrows():
+                        sev = row.get("severity", "unknown")
+                        cid = row.get("claim_id", "N/A")
+                        if sev not in severity_groups:
+                            severity_groups[sev] = []
+                        severity_groups[sev].append(cid)
+
+                    # Display by severity
+                    for severity in ["high", "medium", "low"]:
+                        if severity in severity_groups:
+                            ids = severity_groups[severity]
+                            content.append(
+                                ui.tags.div(
+                                    {
+                                        "class": f"alert alert-{'danger' if severity == 'high' else 'warning' if severity == 'medium' else 'info'} mb-2"
+                                    },
+                                    ui.strong(
+                                        f"{severity.title()} Risk ({len(ids)}): "
+                                    ),
+                                    ", ".join(str(cid) for cid in ids[:20]),
+                                    f" ... and {len(ids) - 20} more"
+                                    if len(ids) > 20
+                                    else "",
+                                )
+                            )
+                else:
+                    # No severity info, just show all claim IDs
+                    content.append(
+                        ui.tags.div(
+                            {"class": "alert alert-warning mb-3"},
+                            ui.strong(f"Claim IDs ({len(claim_ids)}): "),
+                            ", ".join(str(cid) for cid in claim_ids[:30]),
+                            f" ... and {len(claim_ids) - 30} more"
+                            if len(claim_ids) > 30
+                            else "",
+                        )
+                    )
+
+            # Severity breakdown
+            severity_counts = df[df["llm_flagged"]]["severity"].value_counts().to_dict()
+            if severity_counts:
+                content.append(ui.h5("Severity Breakdown"))
+                severity_items = [
+                    ui.tags.li(f"{level.title()}: {count}")
+                    for level, count in severity_counts.items()
+                    if level
+                ]
+                content.append(ui.tags.ul(*severity_items))
+
+        if llm.summary:
+            content.append(ui.h5("Analysis Summary"))
+
+            # Split summary by batch or by sentences for better readability
+            summary_text = llm.summary
+
+            # If it's a multi-batch summary (contains newlines), show as list
+            if "\n" in summary_text:
+                batch_summaries = [
+                    line.strip() for line in summary_text.split("\n") if line.strip()
+                ]
+                if len(batch_summaries) > 1:
+                    content.append(
+                        ui.tags.div(
+                            {"class": "alert alert-info"},
+                            ui.tags.ul(
+                                *[ui.tags.li(summary) for summary in batch_summaries],
+                                {"class": "mb-0"},
+                            ),
+                        )
+                    )
+                else:
+                    content.append(ui.p(summary_text))
+            else:
+                # Single summary: break into sentences for readability
+                sentences = [
+                    s.strip() + "." for s in summary_text.split(".") if s.strip()
+                ]
+                if len(sentences) > 1:
+                    content.append(
+                        ui.tags.div(
+                            {"class": "alert alert-info"},
+                            ui.tags.ul(
+                                *[ui.tags.li(sent) for sent in sentences],
+                                {"class": "mb-0"},
+                            ),
+                        )
+                    )
+                else:
+                    content.append(ui.p(summary_text))
+
+        if llm.error:
+            content.append(
+                ui.div(
+                    {"class": "alert alert-warning"},
+                    ui.strong("Processing Note: "),
+                    llm.error,
+                )
+            )
+
+        if not content:
+            content.append(ui.p("No additional summary available."))
+
+        return ui.card(
+            ui.card_header("Fraud Detection Summary"),
+            *content,
+        )
 
     @output
     @render.ui
     def results_table() -> ui.Tag:
         uploads = input.claims_file()
         if not uploads:
-            return ui.div("Upload a CSV file to begin.")
+            return ui.card(
+                ui.card_header("Claims Review"),
+                ui.p(
+                    {"class": "text-muted text-center py-5"},
+                    ICON_INFO,
+                    ui.br(),
+                    ui.br(),
+                    "Upload a CSV file to begin fraud detection analysis.",
+                ),
+            )
 
         df = consolidated()
-        return ui.div(ui.HTML(format_table(df)))
+        return ui.card(
+            ui.card_header(
+                ui.row(
+                    ui.column(8, "Detailed Claims Review"),
+                    ui.column(
+                        4,
+                        ui.tags.small(
+                            {"class": "text-muted float-end"},
+                            f"Showing {len(df)} claims",
+                        ),
+                    ),
+                )
+            ),
+            ui.HTML(format_table(df)),
+            full_screen=True,
+        )
 
 
 app_ui = ui.page_fluid(
-    ui.tags.style(
-        """
-        body {
-            background-color: #f5f6fa;
-            font-family: 'Helvetica Neue', Arial, sans-serif;
-        }
-        .app-title {margin-bottom: 0.25rem;}
-        .help-panel {margin-top: 0.5rem; color: #495057;}
-        .metrics {display: flex; gap: 1rem; flex-wrap: wrap; margin: 1.5rem 0;}
-        .metric {
-            background: white;
-            border-radius: 0.75rem;
-            padding: 1rem;
-        }
-        .metric h2 {margin: 0.25rem 0 0 0;}
-        table {background: white; border-radius: 0.5rem; overflow: hidden;}
-        th {background: #343a40; color: white;}
-        tbody tr:nth-child(even) {background: #f1f3f5;}
-        tbody tr:hover {background: #e9ecef;}
-        """
-    ),
-    ui.panel_title(APP_TITLE),
-    ui.row(
-        ui.column(
-            6,
+    ui.panel_title(APP_TITLE, "Insurance Fraud Detection powered by AWS Bedrock"),
+    ui.layout_columns(
+        ui.card(
+            ui.card_header(
+                ui.row(
+                    ui.column(8, ui.tags.strong("Upload Claims Data")),
+                    ui.column(4, ICON_INFO),
+                )
+            ),
             ui.input_file(
                 "claims_file",
-                "Upload monthly claim data (CSV)",
+                "Select CSV file",
                 multiple=False,
                 accept=[".csv"],
+                button_label="Browse...",
+            ),
+            ui.help_text(
+                "Upload a CSV file containing claim records. "
+                "The LLM will analyze each claim for potential fraud "
+                "indicators."
             ),
         ),
+        col_widths=[12],
     ),
-    ui.output_ui("guidance"),
-    ui.output_ui("summary_cards"),
-    ui.h3("Claim review results"),
+    ui.layout_columns(
+        ui.output_ui("value_boxes"),
+        col_widths=[12],
+    ),
+    ui.layout_columns(
+        ui.output_ui("summary_card"),
+        col_widths=[12],
+    ),
     ui.output_ui("results_table"),
+    fillable=True,
 )
 
 app = App(app_ui, server)
