@@ -425,10 +425,10 @@ def server(input: Inputs, output: Outputs, session: Session) -> None:
 
     @output
     @render.ui
-    def value_boxes() -> ui.TagList:
+    def value_boxes() -> ui.Tag:
         uploads = input.claims_file()
         if not uploads:
-            return ui.TagList()
+            return ui.div()
 
         df = consolidated()
         total = len(df)
@@ -436,7 +436,7 @@ def server(input: Inputs, output: Outputs, session: Session) -> None:
         cleared_total = total - flagged_total
         flagged_pct = (flagged_total / total * 100) if total > 0 else 0
 
-        return ui.TagList(
+        return ui.layout_columns(
             ui.value_box(
                 title="Total Claims",
                 value=str(total),
@@ -456,6 +456,7 @@ def server(input: Inputs, output: Outputs, session: Session) -> None:
                 showcase=ICON_POSITIVE,
                 theme="success",
             ),
+            col_widths=[4, 4, 4],
         )
 
     @output
