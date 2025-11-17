@@ -10,7 +10,7 @@ InsurDetect is a small repo that demonstrates a guardrailed, LLM-backed fraud tr
 pip install uv
 ```
 
-1. Create a virtual environment and install dependencies:
+2. Create a virtual environment and install dependencies:
 
 ```bash
 python -m venv .venv
@@ -18,19 +18,19 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-1. Set environment variables for Bedrock/AWS credentials:
+3. Set environment variables for Bedrock/AWS credentials:
 
 ```bash
 export AWS_REGION=us-east-1
 ```
 
-1. Run the fraud triage evaluation using the Inspect AI task (example):
+4. Run the fraud triage evaluation using the Inspect AI task (example):
 
 ```bash
 inspect eval detect_fraud_eval.py
 ```
 
-1. View the results in a web browser:
+5. View the results in a web browser:
 
 ```bash
 inspect view
