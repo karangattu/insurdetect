@@ -29,3 +29,11 @@ export AWS_REGION=us-east-1
 ```bash
 inspect eval detect_fraud_eval.py
 ```
+
+1. View the results in a web browser:
+
+```bash
+inspect view
+```
+
+This will start a local server running on `http://127.0.0.1:7575`.

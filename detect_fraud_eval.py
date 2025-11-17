@@ -4,11 +4,13 @@ from inspect_ai.dataset import csv_dataset
 from inspect_ai.scorer import model_graded_qa
 
 
-def get_today_date() -> str:
-    """Return today's date in ISO format."""
+def check_if_future_date(claim_date: str, today_date: str) -> bool:
+    """Check if the claim date is in the future compared to today's date."""
     from datetime import datetime
 
-    return datetime.now().date().isoformat()
+    claim_dt = datetime.fromisoformat(claim_date).date()
+    today_dt = datetime.fromisoformat(today_date).date()
+    return claim_dt > today_dt
 
 
 def build_system_prompt() -> str:
@@ -69,7 +71,7 @@ chat = ChatBedrockAnthropic(
     system_prompt=build_system_prompt(),
 )
 
-chat.register_tool(get_today_date)
+chat.register_tool(check_if_future_date)
 
 
 @task
