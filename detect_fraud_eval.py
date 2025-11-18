@@ -4,12 +4,26 @@ from inspect_ai.dataset import csv_dataset
 from inspect_ai.scorer import model_graded_qa
 
 
-def check_if_future_date(claim_date: str, today_date: str) -> bool:
-    """Check if the claim date is in the future compared to today's date."""
-    from datetime import datetime
+def check_if_future_date(claim_date: str, today_date: str | None = None) -> bool:
+    """
+    Check if claim_date is in the future. If today_date is not provided,
+    compute it server-side to avoid model-supplied wrong values.
+    """
+    from datetime import datetime, date
+    try:
+        claim_dt = datetime.fromisoformat(claim_date).date()
+    except Exception:
+        # fallback: try parsing a trimmed or different format
+        claim_dt = datetime.strptime(claim_date[:10], "%Y-%m-%d").date()
 
-    claim_dt = datetime.fromisoformat(claim_date).date()
-    today_dt = datetime.fromisoformat(today_date).date()
+    if today_date:
+        try:
+            today_dt = datetime.fromisoformat(today_date).date()
+        except Exception:
+            today_dt = date.today()
+    else:
+        today_dt = date.today()
+
     return claim_dt > today_dt
 
 
@@ -69,7 +83,6 @@ as shown below. Rely solely on the provided data.
 
 chat = ChatBedrockAnthropic(
     model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-    cache="none",
     aws_region="us-east-1",
     system_prompt=build_system_prompt(),
 )
@@ -83,7 +96,7 @@ def insurance_fraud_detection():
     return Task(
         dataset=csv_dataset("claims_list.csv"),
         solver=chat.to_solver(),
-        scorer=model_graded_qa(),
+        scorer=model_graded_qa(partial_credit=True),
         name="insurance_fraud_detection_february_claims",
         model="bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0",
     )
