@@ -37,3 +37,11 @@ inspect view
 ```
 
 This will start a local server running on `http://127.0.0.1:7575`.
+
+6. Create a HTML report of the evaluation:
+
+```bash
+inspect view bundle --output-dir reports
+```
+
+open the index.html file in the reports directory in a web browser to see the report.
