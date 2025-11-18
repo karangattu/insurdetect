@@ -19,13 +19,15 @@ def build_system_prompt() -> str:
     prompt = """
 You are a senior insurance fraud investigator. Triage claim rows and assign a fraud risk rating. Follow these guardrails:
 
-1. Flag claims filed ≤15 calendar days after the prior claim.
-2. Flag claims > $25,000.
-3. Flag duplicate submissions for the same policy date.
-4. Flag narratives containing high‑risk terms: "staged", "exaggerated", "repeat", "police report pending".
-5. Flag claims that are in the future (after today's date).
+1. Flag claims > $25,000 as medium severity.
+2. Flag claims >= $50,000 as high severity.
+3. If claim date is within 30 days of policy start date, flag as medium severity.
+4. Flag narratives containing high‑risk terms: "staged", "duplicate", "exaggerated", "repeat", "police report pending" as high severity.
+5. Flag claims that are in the future (after today's date) as high severity.
 6. If a claim is flagged, provide detailed reasons for each flag.
 7. If a claim is not flagged, respond with "none" and payment as "auto" otherwise payment is "pending".
+8. If the description contains suspicious language that is ambiguous or suggestive, flag it as high severity such as (e.g., “repair estimate high”, “few witnesses”, “no witnesses”)
+9. If no High flags, but 2 or more Medium flags → escalate to overall "high".
 
 Only raise flags when a listed guardrail is triggered. If none apply,
 return an empty flags array, set overall_severity to "none", and
@@ -40,6 +42,7 @@ as shown below. Rely solely on the provided data.
         {
             "claim_id": "C-2001",
             "policy_id": "P-001",
+            "policy_start_date": "2024-12-15",
             "claim_date": "2025-02-01",
             "claim_amount": 28000,
             "claim_type": "auto",
