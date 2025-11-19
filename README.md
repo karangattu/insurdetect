@@ -29,6 +29,7 @@ pip install -r requirements.txt
 
 ```bash
 export AWS_REGION=us-east-1
+export AWS_DEFAULT_REGION=us-east-1
 ```
 
 5. Run the fraud triage evaluation using the Inspect AI task (example):
