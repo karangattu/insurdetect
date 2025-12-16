@@ -20,9 +20,9 @@ pip install uv
 
 ```bash
 cd insurdetect
-python -m venv .venv
+uv venv
 source .venv/bin/activate
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 ```
 
 4. Set environment variables for Bedrock/AWS credentials:
