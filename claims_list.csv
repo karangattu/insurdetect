@@ -1,3 +1,4 @@
 input,target
 "Claim C-2001 for $28,000 filed on Feb 1, 2025 (policy P-001 started Dec 15, 2024). Auto claim: Rear-end collision; police report filed; staged accident suspected.","The claim should be flagged as HIGH risk due to the high amount and suspicious 'staged' language. Payment decision: PENDING. This requires manual review due to multiple red flags."
 "Claim C-2002 for $12,500 filed on Jan 15, 2025 (policy P-002 started Jan 10, 2025). Auto claim: Minor fender bender with comprehensive coverage.","This is a straightforward claim with no fraud indicators. Risk level is LOW or NONE. Payment: AUTO-APPROVE without further review."
+"Claim C-2004 for $18,000 filed on Feb 10, 2025 (policy P-004 started Oct 1, 2024). Health claim: Routine surgery with standard medical records.","Clean claim with proper documentation and no red flags. Risk: NONE or LOW. Payment: AUTO-APPROVE."
