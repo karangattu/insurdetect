@@ -4,3 +4,4 @@ inspect-ai @ git+https://github.com/UKGovernmentBEIS/inspect_ai.git@main
 aioboto3
 shiny
 pandas
+great_tables
