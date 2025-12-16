@@ -2,3 +2,5 @@ chatlas @ git+https://github.com/posit-dev/chatlas.git@main
 chatlas[bedrock-anthropic] @ git+https://github.com/posit-dev/chatlas.git@main
 inspect-ai @ git+https://github.com/UKGovernmentBEIS/inspect_ai.git@main
 aioboto3
+shiny
+pandas
